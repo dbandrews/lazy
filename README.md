@@ -4,7 +4,11 @@ LazyVim, configured so that the Python workflow (autoformat, go-to-definition,
 syntax highlighting, debugging, Jupyter notebooks) works the way it does in
 VS Code, and so that the keys you already press mostly do the right thing.
 
-Setup is three commands — see [Setup](#setup).
+Setup is three commands — see [Setup](#setup). Once you're in,
+press `<leader>k` for the shortcut cheatsheet.
+
+[Setup](#setup) · [Python](#python) · [Jupyter notebooks](#jupyter-notebooks) ·
+[Keymaps](#keymaps) · [Notes on the plumbing](#notes-on-the-plumbing)
 
 ## What you get
 
@@ -160,12 +164,13 @@ init.lua                    entry point
 lazyvim.json                which LazyVim extras are on -- edit with `:LazyExtras`
 lua/config/lazy.lua         lazy.nvim bootstrap
 lua/config/options.lua      leaders, python host, molten globals, editor options
-lua/config/keymaps.lua      the VS Code keymap layer
+lua/config/keymaps.lua      loads the VS Code keymap layer + opens the cheatsheet
 lua/config/autocmds.lua     python buffer setup + all the .ipynb plumbing
 lua/plugins/python.lua      LSP / format / debug / test configuration
 lua/plugins/jupyter.lua     molten + jupytext + NotebookNavigator
 lua/plugins/vscode-ui.lua   theme, explorer, tabs -- pure cosmetics, safe to delete
 lua/util/notebook.lua       cell runner (see "Why a custom cell runner")
+lua/util/vscode_keys.lua    the VS Code keymap layer as data; also renders <leader>k
 lua/plugins/example.lua     stock LazyVim reference file; returns {}, does nothing
 ```
 
@@ -246,9 +251,26 @@ and images render inline.
 
 ## Keymaps
 
-The VS Code layer lives entirely in `lua/config/keymaps.lua`; delete the file to
-get stock LazyVim back. Every mapping has a `<leader>` equivalent, because some
-chords depend on the terminal.
+### Looking one up
+
+You should not have to come back to this file:
+
+| | |
+| --- | --- |
+| `<leader>k` | the cheatsheet below, in a floating window (also `:Cheatsheet`, `Ctrl-K Ctrl-S`, or `k` on the start screen) |
+| `<leader>sk` | fuzzy search across *every* keymap, by key or by description — type "definition" to find `F12` |
+| `<leader>?` | which-key, for the current buffer |
+| `<leader>` | just press it and wait; which-key shows what can follow |
+
+The cheatsheet is rendered from the same table that creates the mappings
+(`lua/util/vscode_keys.lua`), and its notebook section is generated from the live
+keymaps, so neither can drift out of date. `lua/config/keymaps.lua` is a
+three-line caller; delete the pair to get stock LazyVim back.
+
+### The layer
+
+Every mapping has a `<leader>` equivalent, because some chords depend on the
+terminal.
 
 | Key | Action |
 | --- | --- |
