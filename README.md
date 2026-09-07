@@ -4,16 +4,7 @@ LazyVim, configured so that the Python workflow (autoformat, go-to-definition,
 syntax highlighting, debugging, Jupyter notebooks) works the way it does in
 VS Code, and so that the keys you already press mostly do the right thing.
 
-Clone to `~/.config/nvim`, run `./install.sh` to get the host-level dependencies,
-start `nvim`, and let lazy.nvim install the plugins.
-
-```sh
-git clone https://github.com/dbandrews/lazy.git ~/.config/nvim
-~/.config/nvim/install.sh
-nvim
-```
-
-Requires Neovim >= 0.11.2 (LazyVim 16); `install.sh` installs 0.12.x.
+Setup is three commands — see [Setup](#setup).
 
 ## What you get
 
@@ -32,6 +23,135 @@ Requires Neovim >= 0.11.2 (LazyVim 16); `install.sh` installs 0.12.x.
 | Sticky scroll | `nvim-treesitter-context` |
 | Interpreter picker | `<leader>cv` |
 | Dark+ theme | `Mofiqul/vscode.nvim` |
+
+## Setup
+
+### Assumptions
+
+Ubuntu/Debian (developed on Ubuntu 22.04 under WSL2) with `sudo`, and
+`~/.local/bin` on your `PATH` — `install.sh` puts `nvim` and friends there and
+warns if it isn't. Neovim >= 0.11.2 is required by LazyVim 16; the installer
+puts 0.12.5 in `~/.local/nvim` without touching any system package.
+
+### 1. Move any existing config out of the way
+
+A stale `~/.config/nvim` or plugin cache is the usual cause of a broken first
+start.
+
+```sh
+mv ~/.config/nvim{,.bak} 2>/dev/null
+mv ~/.local/share/nvim{,.bak} 2>/dev/null
+mv ~/.local/state/nvim{,.bak} 2>/dev/null
+mv ~/.cache/nvim{,.bak} 2>/dev/null
+```
+
+### 2. Clone and install the dependencies
+
+```sh
+git clone https://github.com/dbandrews/lazy.git ~/.config/nvim
+~/.config/nvim/install.sh
+```
+
+`install.sh` is idempotent — re-run it any time; it only does the work that is
+missing. It installs:
+
+| | |
+| --- | --- |
+| apt | `build-essential git curl unzip ripgrep fd-find xdg-utils python3-venv python3-pip`, and symlinks `fd` → `fdfind` |
+| `~/.local/nvim` | Neovim 0.12.5, symlinked to `~/.local/bin/nvim` |
+| `~/.local/bin` | `tree-sitter` CLI v0.25.10 — see [Notes on the plumbing](#notes-on-the-plumbing) for why it is pinned |
+| `uv` tools | `ruff` and `jupytext` on `PATH`; conform.nvim and jupytext.nvim shell out to them |
+| `~/.venvs/nvim` | Neovim's python provider: `pynvim`, `jupyter_client`, `ipykernel`, `nbformat`, `matplotlib`, `debugpy`, plus molten's optional extras. Deliberately separate from your project venvs so notebooks keep working whichever venv is active |
+| kernelspec | a `python3` kernel named "Python 3 (nvim)", the fallback notebooks use |
+| npm | the `neovim` package, so `:checkhealth` is clean |
+| WSL only | `wslu`, `win32yank.exe` for the clipboard, and an `xdg-open` → `wslview` mime association so `<leader>jp` can open plots in Windows |
+
+Pin different versions with `NVIM_VERSION=v0.12.4 ./install.sh` or
+`TREE_SITTER_VERSION=...`.
+
+### 3. First launch
+
+```sh
+nvim
+```
+
+lazy.nvim bootstraps itself and installs ~60 plugins, then mason fetches
+`basedpyright`, `debugpy` and `ruff`, and nvim-treesitter compiles ~35 parsers.
+Give it a few minutes on a cold start and **leave nvim open until it settles** —
+mason aborts in-flight installs if you quit early.
+
+On a first bulk install a handful of treesitter parsers usually fail with a
+transient error. Re-running `:TSUpdate` fixes them; nothing else is affected.
+
+### 4. Check it worked
+
+```vim
+:LazyHealth        " lazy.nvim + every plugin's health check
+:checkhealth       " should be all green -- especially provider and molten
+:Lazy              " plugin status
+:Mason             " basedpyright / debugpy / ruff should say 'installed'
+```
+
+Then open a Python file and confirm the three things that prove the wiring:
+
+```vim
+:lua =vim.tbl_map(function(c) return c.name end, vim.lsp.get_clients({bufnr=0}))
+                   " => { "basedpyright", "ruff" }
+:LazyFormatInfo    " => conform.nvim (active): ruff_organize_imports, ruff_format
+:lua =require("nvim-treesitter.config").get_installed("parsers")
+```
+
+### Per-project setup
+
+Nothing is required — but two optional steps make a project behave the way it
+would in VS Code.
+
+**An interpreter for the type checker and debugger.** basedpyright picks up
+`$VIRTUAL_ENV`, then `$CONDA_PREFIX`, then `.venv/` or `venv/` in the project
+root, so a conventional venv just works. `<leader>cv` switches it at runtime and
+also searches `~/.venvs`.
+
+```sh
+uv venv                       # -> .venv, found automatically
+```
+
+**A kernel for notebooks.** Molten picks the kernel named in the notebook's
+metadata, else one named after the active virtualenv, else `python3` (which
+resolves to `~/.venvs/nvim` and will not see your project's packages). To make
+notebooks run against the project venv, register a kernel under the venv's name:
+
+```sh
+uv pip install --python .venv/bin/python ipykernel
+.venv/bin/python -m ipykernel install --user --name "$(basename "$PWD")"
+```
+
+### Updating
+
+```vim
+:Lazy sync         " plugins, then commit the refreshed lazy-lock.json
+:Mason             " U updates one tool, Ctrl-U all of them
+:TSUpdate          " treesitter parsers
+```
+
+`./install.sh` again for Neovim itself and the host-level tooling.
+
+### Other machines
+
+`install.sh` is apt-based, and the clipboard and image-viewer steps are guarded
+behind a WSL check, so it skips them on native Linux. On macOS or a non-Debian
+distro the Neovim config itself is portable — install the equivalents by hand
+(Neovim >= 0.11.2, `ripgrep`, `fd`, a `tree-sitter` CLI, `uv`, and the
+`~/.venvs/nvim` provider venv) and everything else works unchanged.
+
+### If something is wrong
+
+| Symptom | Cause |
+| --- | --- |
+| Parsers fail with `GLIBC_2.39 not found` | Mason's `tree-sitter` CLI shadowing the pinned one — `rm -rf ~/.local/share/nvim/mason/packages/tree-sitter-cli ~/.local/share/nvim/mason/bin/tree-sitter` and re-run `install.sh` |
+| No LSP in a notebook | `:lua =vim.b.ipynb_file_events` should be `true`; see [Notes on the plumbing](#notes-on-the-plumbing) |
+| Notebook cells do nothing | `:checkhealth molten`, then `:MoltenInfo`. The python provider venv is the usual culprit — re-run `install.sh` |
+| A notebook opens with stale contents | A leftover sibling `<name>.py` is shadowing it; delete that file |
+| `:checkhealth` says no clipboard tool | `win32yank.exe` is missing from `~/.local/bin` (WSL) |
 
 ## Layout
 
@@ -94,13 +214,8 @@ vih / vah                   select inside / around the cell
 ```
 
 The kernel is chosen automatically: the one named in the notebook's metadata, else
-one named after the active virtualenv, else `python3`. To make a project venv's
-kernel the one notebooks use, register it under the venv's own name:
-
-```sh
-uv pip install --python .venv/bin/python ipykernel
-.venv/bin/python -m ipykernel install --user --name "$(basename "$PWD")"
-```
+one named after the active virtualenv, else `python3`. See
+[Per-project setup](#per-project-setup) for pointing notebooks at a project venv.
 
 While a notebook is open, jupytext keeps a sibling `<name>.py` next to it as its
 scratch representation and removes it when the buffer unloads. Don't delete the
